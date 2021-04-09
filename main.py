@@ -31,6 +31,7 @@ PORT = os.environ["PORT"]
 intents = discord.Intents().all()
 bot = commands.Bot(command_prefix=".", intents=intents)  # creates bot instance
 slash = SlashCommand(bot, override_type = True)
+guild_ids = [591065297692262410]
 
 lvls = mysql.connector.connect(user = USER,
                                password = PASSWORD,
@@ -156,15 +157,24 @@ async def on_member_join(member):  # triggers on member join
     # informational message
     await main.send(f"{member.name} is here!")
     
-@slash.slash(name="test", description="test", )
-async def test(ctx : SlashContext):
-    await ctx.send("test")
+@slash.slash(name="test",
+             description="This is just a test command, nothing more.",
+             options=[
+                create_option(
+                    name="optone",
+                    description="This is the first option we have.",
+                    option_type=3,
+                    required=False
+                )
+             ])
+async def test(ctx, optone: str):
+  await ctx.send(content=f"I got you, you said {optone}!")
     
-@slash.slash(name='level', description="Displays someones level in axolotl clan", options = [create_option(name="user", 
-                                                                                                           description="find level of user", 
-                                                                                                           option_type=6,
-                                                                                                           required=False)])
-async def _level(ctx : SlashContext, user: discord.Member):
+@slash.slash(name='level', description="Displays someones level in axolotl clan", options=[create_option(name="user", 
+                                                                                  description="user to find the level",
+                                                                                  option_type=6,
+                                                                                  required=False)])
+async def _level(ctx : SlashContext, user: discord.Member = None):
     spam = bot.get_channel(768876717422936115)
     if user == None:
         user = ctx.author
@@ -217,17 +227,14 @@ async def _invites(ctx : SlashContext):
 
 @slash.slash(name='ping', description="pings someone 5 times")
 @commands.has_role('Admin')
-async def _ping(ctx : SlashContext, user: discord.Member):
+async def _ping(ctx : SlashContext, user : discord.Member):
     for _ in range(5):
         await ctx.send(user.mention)
 
 
-@slash.slash(name='setlevel', description="Displays someones level in axolotl clan", options = [create_option(name="user", 
-                                                                                                              description="find level of user", 
-                                                                                                              option_type=6,
-                                                                                                              required=False)])
+@slash.slash(name='setlevel', description="sets someone's level in axolotl clan")
 @commands.has_role('Admin')
-async def _setlevel(ctx : SlashContext, user: discord.Member):
+async def setlevel(ctx : SlashContext, user : discord.Member):
     if user in ctx.guild.members:
         await ctx.send("enter the level: ")
         
