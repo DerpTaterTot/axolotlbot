@@ -15,7 +15,8 @@ from datetime import datetime
 import discord
 from dotenv import load_dotenv
 from discord.ext import commands
-
+from discord_slash import SlashCommand, SlashContext
+from discord_slash.utils.manage_commands import create_option
 # database
 import mysql.connector
 
@@ -29,6 +30,7 @@ PORT = os.environ["PORT"]
 
 intents = discord.Intents().all()
 bot = commands.Bot(command_prefix=".", intents=intents)  # creates bot instance
+slash = SlashCommand(bot, override_type = True)
 
 lvls = mysql.connector.connect(user = USER,
                                password = PASSWORD,
@@ -88,7 +90,7 @@ async def on_message(message):
 
         for message in msgs:  # iterate through all the sent messages
             await message.delete()  # delete them
-
+    
     if message.channel == relay and "@" not in message.content:
         await main.send(message.content)
     if message.channel == main and "@" not in message.content:
@@ -154,29 +156,34 @@ async def on_member_join(member):  # triggers on member join
     # informational message
     await main.send(f"{member.name} is here!")
     
-
-@bot.command(aliases=['lvl', 'level'], help="Displays someones level in axolotl clan")
-async def _level(ctx, user: discord.Member = None):
+@slash.slash(name="test", description="test", )
+async def test(ctx : SlashContext):
+    await ctx.send("test")
+    
+@slash.slash(name='level', description="Displays someones level in axolotl clan", options = [create_option(name="user", 
+                                                                                                           description="find level of user", 
+                                                                                                           option_type=6,
+                                                                                                           required=False)])
+async def _level(ctx : SlashContext, user: discord.Member):
     spam = bot.get_channel(768876717422936115)
     if user == None:
-        id = str(ctx.message.author.id)
-    else:
-        id = str(user.id)
+        user = ctx.author
+    id = str(user.id)
     if ctx.channel == spam:
         if sql.checkExist(id):
             level = "level: " + str(sql.getLevel(id)) + "\n"  # accesses the level of the person who sent it from the json file.
             msgs = "xp: " + str(sql.getXP(id)) + "/" + str(100 * (sql.getLevel(id) - 1) + 50)  # accesses the xp needed from the json file, (current xp/needed xp)
 
             levelinfoembed = discord.Embed(title=level + msgs, color=LIGHTPINK,timestamp=datetime.utcnow())  # creates embed of levels (and sets a timestamp)
-            levelinfoembed.set_footer(text='Retrieved Data')
+            levelinfoembed.set_footer(text='Level for ' + user.name)
 
             await ctx.send(embed=levelinfoembed)
         else:
             levelinfoembed = discord.Embed(title="I couldn't find that user, try mentioning them instead", color=LIGHTPINK, timestamp=datetime.utcnow())
             await ctx.send(embed=levelinfoembed)
 
-@bot.command(name = "balls", help = "Gives Arav 10000 xp cuz he creams to dream")
-async def balls(ctx):
+@slash.slash(name = "balls", description = "Gives Arav 10000 xp cuz he creams to dream")
+async def balls(ctx : SlashContext):
     spam = bot.get_channel(768876717422936115)
     if ctx.channel == spam:
         ball = discord.Embed(title = "Gave Arav 10000 xp", color = LIGHTPINK, timestamp = datetime.utcnow())
@@ -184,11 +191,11 @@ async def balls(ctx):
     else:
         await ctx.message.send("Go to spam smh my head")
         
-@bot.command(name='invites', help='checks how many invites you have, if you have three or higher you get vip')
-async def _invites(ctx):
+@slash.slash(name='invites', description='checks how many invites you have, if you have three or higher you get vip')
+async def _invites(ctx : SlashContext):
     axolotlclan = bot.get_guild(591065297692262410)
-    message = ctx.message
-    user = message.author
+    
+    user = ctx.author
 
     totalInvites = 0
     for i in await ctx.guild.invites():
@@ -201,63 +208,71 @@ async def _invites(ctx):
     if totalInvites >= 3 and vip not in ctx.author.roles:
         viprank = str("congrats, you earned the VIP role!")
         vipembed = discord.Embed(title=viprank, color=LIGHTPINK)  # vip embed once they reach level 25
-        await message.channel.send(embed=vipembed)
+        await ctx.send(embed=vipembed)
 
         await user.add_roles(vip)
 
     await ctx.send(embed=invitesEmbed)
 
 
-@bot.command(name='ping', help="pings someone 5 times")
+@slash.slash(name='ping', description="pings someone 5 times")
 @commands.has_role('Admin')
-async def _ping(ctx, user: discord.Member):
+async def _ping(ctx : SlashContext, user: discord.Member):
     for _ in range(5):
         await ctx.send(user.mention)
 
 
-@bot.command(name="setlevel", help="sets someone level to specific number")
+@slash.slash(name='setlevel', description="Displays someones level in axolotl clan", options = [create_option(name="user", 
+                                                                                                              description="find level of user", 
+                                                                                                              option_type=6,
+                                                                                                              required=False)])
 @commands.has_role('Admin')
-async def _setlevel(ctx, *args):
-    foundUser = False
-    if len(args) != 2:
-        await ctx.send("invalid format, please do .setlevel (user) (level)")
-        return
-    elif int(args[1]) < 0:
-        await ctx.send("you can't have a negative level")
-        return
-    else:
-        for user in ctx.guild.members:
-            if args[0] == user.name:
-                sql.editLevel(str(user.id), int(args[1]) - sql.getLevel(str(user.id)))
+async def _setlevel(ctx : SlashContext, user: discord.Member):
+    if user in ctx.guild.members:
+        await ctx.send("enter the level: ")
+        
+        level = await bot.wait_for('message', check=lambda message: message.author == ctx.author and message.channel == ctx.channel)
+        
+        if level < 0:
+            await ctx.send("You can't have a negative level")
+        elif level > 500:
+            await ctx.send("The max level is 500")
+        elif not level.is_integer():
+            await ctx.send("The level must be an integer")
+        else: 
+            sql.editLevel(str(user.id), level - sql.getLevel(str(user.id)))
 
-                await ctx.send(f"set **{user.name}**'s level to {args[1]}")
-                foundUser = True
-                break
-    if not foundUser:
+            await ctx.send(f"set **{user.name}**'s level to {level}")
+    
+    else:
         await ctx.send("could not find that user")
 
 
-@bot.command(aliases=["lb", "leaderboard"])
-async def _leaderboard(ctx):
+@slash.slash(name="lb")
+async def _leaderboard(ctx : SlashContext):
     rawxpleaderboard = []
     rawxpdictionary = {}
     leaderboard = []
-
+    sorteddictionary = {}
+    sortedkeys = []
+    
     for user in sql.getIDs():
         person = bot.get_user(int(user))
 
         if not person.bot:
             rawxp = (100 * (sql.getLevel(user) - 2) + 100) * (sql.getLevel(user) - 1) / 2 + sql.getXP(user)
-            rawxpleaderboard.append(rawxp)
-            rawxpdictionary[rawxp] = person
+            rawxpdictionary[person] = rawxp
 
-    rawxpleaderboard.sort(reverse=True)
+    sortedkeys = sorted(rawxpdictionary, key=rawxpdictionary.get)
+    
+    for i in sortedkeys:
+        sorteddictionary[i] = rawxpdictionary[i]
 
     for i in range(20):
-        usr = rawxpdictionary[rawxpleaderboard[i]]
+        usr = list(sorteddictionary.items())[-i-1][0]
         userLevel = sql.getLevel(usr.id)
         userXP = sql.getXP(usr.id)
-        leaderboard.append(f"{i + 1}. {usr.name}'s raw xp: **{int(rawxpleaderboard[i])}** | level: **{userLevel}** | xp: **{userXP}**")
+        leaderboard.append(f"{i + 1}. {usr.name}'s level: **{userLevel}** | xp: **{userXP}**")
 
     lbString = ""
     for place in leaderboard:
@@ -268,10 +283,6 @@ async def _leaderboard(ctx):
     lbEmbed.set_footer(text="Axolotl Clan")
     await ctx.send(embed=lbEmbed)
 
-@balls.error
-async def balls_error(ctx,error):
-    if isinstance(error, commands.CommandOnCooldown):
-        await ctx.send(error)
 
 bot.add_cog(Games(bot))
 bot.add_cog(Admin(bot))
